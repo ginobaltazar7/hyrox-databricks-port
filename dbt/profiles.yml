@@ -1,0 +1,15 @@
+# dbt profile for the Databricks port.
+# Auth: run `databricks auth login` once on your laptop, then use oauth here.
+# No PATs, no secret scopes — dbt's own docs now call PATs legacy.
+# Copy to ~/.dbt/profiles.yml (never commit a filled-in copy).
+hyrox_databricks:
+  target: dev
+  outputs:
+    dev:
+      type: databricks
+      catalog: hyrox
+      schema: silver
+      host: <DATABRICKS_WORKSPACE_HOST>
+      http_path: <SQL_WAREHOUSE_HTTP_PATH>
+      auth_type: oauth
+      threads: 4

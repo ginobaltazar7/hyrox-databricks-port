@@ -1,0 +1,19 @@
+name: hyrox_databricks_port
+version: 1.0.0
+config-version: 2
+
+profile: hyrox_databricks
+
+model-paths: ["models"]
+seed-paths: ["seeds"]
+test-paths: ["tests"]
+macro-paths: ["macros"]
+
+models:
+  hyrox_databricks_port:
+    silver:
+      +materialized: incremental
+      +incremental_strategy: merge
+      +unique_key: result_id
+    gold_marketing:
+      +materialized: table

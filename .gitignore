@@ -1,0 +1,20 @@
+# Python / dbt / Databricks
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+target/
+logs/
+dbt_packages/
+.env
+*.parquet
+*.csv
+
+# Databricks
+.databricks/
+.databrickscfg
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
