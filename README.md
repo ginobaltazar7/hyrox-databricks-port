@@ -2,7 +2,7 @@
 
 A Databricks port of the [hyrox-tieredsla-pipeline](https://github.com/ginobaltazar7/hyrox-tieredsla-pipeline) (Snowflake) medallion pipeline using the same data, same questions, but a different cloud.
 
-Why this port. To experiment and study the variations needed and patterns between one pipeline, one semantic model but differing warehouses. The Snowflake repo is the system of record; this repo proves the pipeline is portable in some aspects and gives the semantic layer (Ossie) a second consumer. 
+Why this port? To experiment and study the variations needed and patterns between one pipeline, one semantic model but differing warehouses. The Snowflake repo is the system of record; this repo proves the pipeline is portable in some aspects and gives the semantic layer (Ossie) a second consumer. 
 
 ## Architecture map (Snowflake → Databricks)
 
@@ -29,9 +29,9 @@ ossie/        Vendored Ossie hub doc (lands here when the semantic layer is buil
 
 - [x] **1. Free Edition setup** — sign up (personal email, no card), `databricks auth login`
 
-- [x] **2. Bronze** — run DDL, run ingestion notebook → Delta bronze
+- [x] **2. Bronze** — run DDL, run ingestion notebook → Delta bronze; 2026-10-21: mirrored [parse_split_minutes() from Snowflake](https://github.com/ginobaltazar7/hyrox-tieredsla-pipeline/commit/c8fc47299a28f2ee92320e098334b2d594bcd077) — best_run_lap text→minutes, NULLs preserved; bronze re-ingested + verified (5,000 rows, zero_laps = 0)
 
-- [ ] **3. Silver + Gold** — `dbt build` with the Databricks adapter
+- [ ] **3. Silver + Gold** — `dbt build` with the Databricks adapter (before the first build: pin dbt-core + dbt-databricks as a matched pair in requirements, the [Snowflake side's unpinned install pulled a beta dbt-core and broke snapshots](https://github.com/ginobaltazar7/hyrox-tieredsla-pipeline/commit/670edf159738e5d4e9fabf4f097551972fbfda5d))
 
 - [ ] **4. WAP + audits** — port the write-audit-publish gate and data-quality checks
 

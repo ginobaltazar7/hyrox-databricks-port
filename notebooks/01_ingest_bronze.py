@@ -3,10 +3,20 @@
 # [tool.databricks.environment]
 # environment_version = "2"
 # ///
+# MAGIC %md
+# MAGIC # Ingest Bronze
+
+# COMMAND ----------
+
 # Ingest the Hyrox season 8 parquet into Delta bronze.
 # Adapted from scripts/raw_ingest.py in hyrox-tieredsla-pipeline.
 # The pyrox-client path is intentionally left out: the default path reads the
 # pre-fetched parquet, exactly like the Snowflake pipeline.
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ### Optional Full season pull via Pyrox client
 
 # COMMAND ----------
 
@@ -38,6 +48,11 @@
 
 # COMMAND ----------
 
+# MAGIC %md
+# MAGIC ### Local Parquet file pull
+
+# COMMAND ----------
+
 # Config — set these before running.
 PARQUET_PATH = "/Volumes/hyrox/bronze/landing/hyrox_season_8.parquet"
 # Alternative: download once from the Snowflake repo and upload to the Volume:
@@ -46,10 +61,71 @@ BRONZE_TABLE = "hyrox.bronze.hyrox_raw_season_8"
 
 # COMMAND ----------
 
+# MAGIC %md
+# MAGIC ### Pre-Flight Checks
+
+# COMMAND ----------
+
+# COMMAND ----------
+
+# Pre-flight: source schema peek. The split columns' types decide how the
+# split parsing below has to work: numeric minutes pass through, text
+# durations ('0:03:53') need converting, any missing must stay NULL — never 0.
+
+# comment this next spark.read.parquet statement out if using the pyrox client above
+df = spark.read.parquet(PARQUET_PATH)
+
+# commence pre-flight check
+for f in df.schema.fields:
+    if f.name.endswith("_time") or f.name == "best_run_lap":
+        print(f.name, f.dataType)
+df.select("run1_time", "skierg_time", "best_run_lap").show(5, truncate=False)
+print("rows:", df.count())
+
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ### Parse Split Minutes
+
+# COMMAND ----------
+
+# COMMAND ----------
+
+# Split parsing — port of parse_split_minutes (in Snowflake repo "utils/sanitizers.py").
+# Pre-flight showed 19 of 20 split fields already arrive as DoubleType minutes:
+# pass-through, NULLs included. Only best_run_lap arrives as 'H:MM:SS' text.
+# Missing / blank / unparseable -> NULL, never 0.
+
 from pyspark.sql import functions as F
 
-# comment this next statement out if using the pyrox client above
-df = spark.read.parquet(PARQUET_PATH)
+lap = F.trim(F.col("best_run_lap"))
+parts = F.split(lap, ":")
+seconds = (
+    F.when(F.size(parts) == 3,
+           parts.getItem(0).cast("double") * 3600
+           + parts.getItem(1).cast("double") * 60
+           + parts.getItem(2).cast("double"))
+     .when(F.size(parts) == 2,
+           parts.getItem(0).cast("double") * 60
+           + parts.getItem(1).cast("double"))
+)
+df = df.withColumn(
+    "best_run_lap",
+    F.when(lap.isNull() | (lap == "") | ~lap.rlike(r"^\d+:\d{1,2}(:\d{1,2})?$"), None)
+     .otherwise(seconds / 60.0),
+)
+df.select("run1_time", "skierg_time", "best_run_lap").show(5, truncate=False)
+
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ### Identity Rules
+
+# COMMAND ----------
+
+from pyspark.sql import functions as F
 
 # Identity rules, ported exactly from scripts/raw_ingest.py (Snowflake):
 #   athlete_id = "ath_" + sha256(name|gender|nationality|age_group)[:16]
