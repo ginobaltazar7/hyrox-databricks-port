@@ -31,11 +31,11 @@ ossie/        Vendored Ossie hub doc (lands here when the semantic layer is buil
 
 - [x] **2. Bronze** — run DDL, run ingestion notebook → Delta bronze; 2026-10-21: mirrored [parse_split_minutes() from Snowflake](https://github.com/ginobaltazar7/hyrox-tieredsla-pipeline/commit/c8fc47299a28f2ee92320e098334b2d594bcd077) — best_run_lap text→minutes, NULLs preserved; bronze re-ingested + verified (5,000 rows, zero_laps = 0)
 
-- [ ] **3. Silver + Gold** — `dbt build` with the Databricks adapter (before the first build: pin dbt-core + dbt-databricks as a matched pair in requirements, the [Snowflake side's unpinned install pulled a beta dbt-core and broke snapshots](https://github.com/ginobaltazar7/hyrox-tieredsla-pipeline/commit/670edf159738e5d4e9fabf4f097551972fbfda5d))
+- [x] **3. Silver + Gold** — `dbt build` with the Databricks adapter (before the first build: pin dbt-core + dbt-databricks as a matched pair in requirements, the [Snowflake side's unpinned install pulled a beta dbt-core and broke snapshots](https://github.com/ginobaltazar7/hyrox-tieredsla-pipeline/commit/670edf159738e5d4e9fabf4f097551972fbfda5d))
 
 - [ ] **4. WAP + audits** — port the write-audit-publish gate and data-quality checks
 
-- [ ] **5. Semantic layer** — vendor the Ossie doc from the Snowflake repo, export Databricks semantic layer
+- [ ] **5. Semantic layer** — dbt semantic models, validated and queried with [MetricFlow](https://docs.getdbt.com/docs/build/build-metrics-intro?version=2) and exported as portable [Apache Ossie](https://github.com/apache/ossie-converters) YAML, export Databricks semantic layer
 
 - [ ] **6. Dashboards** — AI/BI dashboards for Q1–Q5
 
@@ -132,3 +132,4 @@ git init && git add . && git commit -m "scaffold: Databricks port of hyrox pipel
 gh repo create hyrox-databricks-port --public --source=. --push
 ```
 
+<sub>Parts of this project, including documentation and analysis, were developed with assistance from Naru, an AI assistant.</sub>
