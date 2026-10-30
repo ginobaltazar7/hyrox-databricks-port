@@ -1,0 +1,8 @@
+version: 2
+
+sources:
+  - name: bronze
+    database: hyrox
+    schema: bronze
+    tables:
+      - name: hyrox_raw_season_8

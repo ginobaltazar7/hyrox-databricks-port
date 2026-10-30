@@ -10,7 +10,7 @@ SELECT
   result_id, source_result_id, event_id, athlete_id,
   name, gender, nationality, age_group,
   division, season, year, event_name, location,
-  total_time_minutes,
+  total_time AS total_time_minutes,
   run1_time, run2_time, run3_time, run4_time,
   run5_time, run6_time, run7_time, run8_time,
   skierg_time, sledpush_time, sledpull_time,
