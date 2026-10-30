@@ -35,7 +35,7 @@ ossie/        Vendored Ossie hub doc (lands here when the semantic layer is buil
 
 - [ ] **4. WAP + audits** — port the write-audit-publish gate and data-quality checks
 
-- [ ] **5. Semantic layer** — dbt semantic models, validated and queried with [MetricFlow](https://docs.getdbt.com/docs/build/build-metrics-intro?version=2) and exported as portable [Apache Ossie](https://github.com/apache/ossie-converters) YAML, export Databricks semantic layer
+- [x] **5. Semantic layer** — dbt semantic models, validated and queried with [MetricFlow](https://docs.getdbt.com/docs/build/build-metrics-intro?version=2) and exported as portable [Apache Ossie](https://github.com/apache/ossie-converters) YAML, export Databricks semantic layer
 
 - [ ] **6. Dashboards** — AI/BI dashboards for Q1–Q5
 

@@ -1,0 +1,80 @@
+version: 0.2.0.dev0
+name: semantic_model
+datasets:
+- name: result_pacing
+  source: '`hyrox`.`gold_marketing`.`q2_station_degradation`'
+  primary_key:
+  - result_id
+  description: 'Per-result pacing fields for Q2: first-km deviation vs later-station
+    degradation. One row per result.'
+  fields:
+  - name: result_id
+    expression:
+      dialects:
+      - dialect: ANSI_SQL
+        expression: result_id
+    description: Result grain key, one row per result.
+  - name: division
+    expression:
+      dialects:
+      - dialect: ANSI_SQL
+        expression: division
+    dimension:
+      is_time: false
+    description: Division, the Q2 grouping dimension.
+  - name: pacing_date
+    expression:
+      dialects:
+      - dialect: ANSI_SQL
+        expression: pacing_date
+    dimension:
+      is_time: true
+    description: Fixed sentinel date satisfying MetricFlow's required agg_time_dimension.
+      Not an event date; never use for time slicing.
+- name: station_variance
+  source: '`hyrox`.`gold_marketing`.`q1_station_variance`'
+  primary_key:
+  - station
+  description: 'Per-station variance of Hyrox station split times for the elite-pro
+    union (pro, pro_doubles, elite, elite_doubles; 400 results). One row per station,
+    built from q1_station_long. Note: splits are station work times, not transition
+    times; roxzone is excluded.'
+  fields:
+  - name: station
+    expression:
+      dialects:
+      - dialect: ANSI_SQL
+        expression: station
+    description: Station split name (e.g. SLEDPULL_TIME), one of the 8 station splits.
+  - name: variance_date
+    expression:
+      dialects:
+      - dialect: ANSI_SQL
+        expression: variance_date
+    dimension:
+      is_time: true
+    description: Fixed sentinel date satisfying MetricFlow's required agg_time_dimension.
+      Not an event date; never use for time slicing.
+metrics:
+- name: avg_first_km_deviation
+  expression:
+    dialects:
+    - dialect: ANSI_SQL
+      expression: AVG(result_pacing.first_km_deviation)
+  description: Average first-km deviation (run1 minus athlete own mean run time) by
+    division.
+- name: avg_station_degradation
+  expression:
+    dialects:
+    - dialect: ANSI_SQL
+      expression: AVG(result_pacing.station_degradation)
+  description: Average station degradation (wall balls minus SkiErg) by division.
+- name: transition_time_variance_elite_pro
+  expression:
+    dialects:
+    - dialect: ANSI_SQL
+      expression: SUM(station_variance.transition_time_variance)
+  description: 'Sample variance of station split times across the elite-pro union,
+    by station. Passthrough: sum over the precomputed per-station variance, one row
+    per station, so sum returns the value unchanged. Group by station only; never
+    sum across stations.'
