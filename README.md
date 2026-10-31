@@ -1,8 +1,12 @@
-# hyrox-databricks-port
+# HYROX Tiered SLA & Performance Analytics Pipeline using Databricks
+
+For fans of Hyrox workouts, like my niece Isabele who is racing in November 2026 - very inspiring!  
+
+## Hyrox-databricks-port
 
 A Databricks port of the [hyrox-tieredsla-pipeline](https://github.com/ginobaltazar7/hyrox-tieredsla-pipeline) (Snowflake) medallion pipeline using the same data, same questions, but a different cloud.
 
-Why this port? To experiment and study the variations needed and patterns between one pipeline, one semantic model but differing warehouses. The Snowflake repo is the system of record; this repo proves the pipeline is portable in some aspects and gives the semantic layer (Ossie) a second consumer. 
+Why this port? To experiment and study the variations needed and patterns between one pipeline, one semantic model but differing warehouses. The Snowflake repo is the system of record; this repo proves the pipeline is portable in some aspects and gives the semantic layer (Apache Ossie) a second consumer. 
 
 ## Architecture map (Snowflake → Databricks)
 
@@ -33,7 +37,7 @@ ossie/        Vendored Ossie hub doc (lands here when the semantic layer is buil
 
 - [x] **3. Silver + Gold** — `dbt build` with the Databricks adapter (before the first build: pin dbt-core + dbt-databricks as a matched pair in requirements, the [Snowflake side's unpinned install pulled a beta dbt-core and broke snapshots](https://github.com/ginobaltazar7/hyrox-tieredsla-pipeline/commit/670edf159738e5d4e9fabf4f097551972fbfda5d))
 
-- [ ] **4. WAP + audits** — port the write-audit-publish gate and data-quality checks
+- [x] **4. WAP + audits** — port the write-audit-publish gate and data-quality checks
 
 - [x] **5. Semantic layer** — dbt semantic models, validated and queried with [MetricFlow](https://docs.getdbt.com/docs/build/build-metrics-intro?version=2) and exported as portable [Apache Ossie](https://github.com/apache/ossie-converters) YAML, export Databricks semantic layer
 
