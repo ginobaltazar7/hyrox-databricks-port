@@ -43,6 +43,30 @@ ossie/        Vendored Ossie hub doc (lands here when the semantic layer is buil
 
 - [ ] **6. Dashboards** — AI/BI dashboards for Q1–Q5
 
+## Lineage — clean split
+
+- **Unity Catalog, here:** built-in table and column lineage in Catalog
+  Explorer for the port tables, including `pacing_obt`, Q1, and Q2. This is
+  the lineage layer for the Databricks side, no custom graph required.
+
+- **Neo4j, Snowflake side:** the custom schema lineage graph lives in the
+  Snowflake repo (`scripts/neo4j_load_schema.py`), not here. It is the
+  cross-system graph, with gold tagged verified and bronze tagged unverified.
+
+- **Apache Jena, later only:** formal ontology and inference, if lineage
+  alone is not enough. Not part of v1.
+
+### Sample questions Unity Catalog answers
+
+- "What feeds `pacing_obt`?" — open the table in Catalog Explorer and
+  follow its upstream lineage.
+
+- "What depends on `q1_station_variance`?" — follow its downstream lineage
+  in the same view.
+
+- "Which columns feed `avg_station_degradation`?" — column-level lineage,
+  not just table-level.
+
 ## Setup runbook (first green build, 2026-10-17)
 
 1. Sign up at databricks.com/learn/free-edition → "For Personal Use" → **Free Edition**
