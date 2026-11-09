@@ -1,12 +1,14 @@
 # HYROX Tiered SLA & Performance Analytics Pipeline using Databricks
 
-For fans of Hyrox workouts, like my niece Isabele who is racing in November 2026 - very inspiring!  
+For fans of Hyrox workouts, like my niece [Isabele](https://www.linkedin.com/in/isabele-rodman-60bb82293/) who is racing in November 2026 - very inspiring!  
 
 ## Hyrox-databricks-port
 
 A Databricks port of the [hyrox-tieredsla-pipeline](https://github.com/ginobaltazar7/hyrox-tieredsla-pipeline) (Snowflake) medallion pipeline using the same data, same questions, but a different cloud.
 
 Why this port? To experiment and study the variations needed and patterns between one pipeline, one semantic model but differing warehouses. The Snowflake repo is the system of record; this repo proves the pipeline is portable in some aspects and gives the semantic layer (Apache Ossie) a second consumer. 
+
+Data: the same 5,000-row Season 8 sample as the Snowflake repo — public HYROX results via the unofficial pyrox-client, not licensed HYROX data. Full provenance is in the [Snowflake repo README](https://github.com/ginobaltazar7/hyrox-tieredsla-pipeline)
 
 ## Architecture map (Snowflake → Databricks)
 
@@ -15,7 +17,7 @@ Why this port? To experiment and study the variations needed and patterns betwee
 | `RAW_BRONZE.HYROX_RAW_SEASON_8` | `bronze.hyrox_raw_season_8` (Delta) |
 | `SILVER.stg_hyrox_races` (dbt incremental) | `silver.stg_hyrox_races` (Delta, dbt) |
 | `GOLD_MARKETING.pacing_obt` | `gold_marketing.pacing_obt` (Delta, dbt) |
-| SPCS dbt runner / Metabase | Databricks SQL + AI/BI dashboards |
+| SPCS dbt runner | Databricks SQL + AI/BI dashboards |
 | Snowpark `raw_ingest.py` | `notebooks/01_ingest_bronze.py` |
 
 ## Repo layout
@@ -24,7 +26,7 @@ Why this port? To experiment and study the variations needed and patterns betwee
 sql/          Delta DDL (catalog, schemas, bronze/silver/gold tables)
 notebooks/    Ingestion notebook (parquet → Delta bronze)
 dbt/          dbt project (databricks adapter) — silver + gold models
-ossie/        Vendored Ossie hub doc (lands here when the semantic layer is built)
+ossie/        Ossie semantic model YAML.
 ```
 
 ## Phases
@@ -41,13 +43,17 @@ ossie/        Vendored Ossie hub doc (lands here when the semantic layer is buil
 
 - [x] **5. Semantic layer** — dbt semantic models, validated and queried with [MetricFlow](https://docs.getdbt.com/docs/build/build-metrics-intro?version=2) and exported as portable [Apache Ossie](https://github.com/apache/ossie-converters) YAML, export Databricks semantic layer
 
-- [ ] **6. Dashboards** — AI/BI dashboards for Q1–Q5
+- [x] **6. Dashboards** — delivered as the Streamlit app in the Snowflake repo (`streamlit_app/`, Q1 bar, Q2 scatter + correlation table, Q5 notes panel, mobile-first, on Render), reading the Snowflake tables. No separate Databricks dashboard is planned for Q1–Q5.
 
 ## Lineage — clean split
 
 - **Unity Catalog, here:** built-in table and column lineage in Catalog
   Explorer for the port tables, including `pacing_obt`, Q1, and Q2. This is
   the lineage layer for the Databricks side, no custom graph required.
+
+![Unity Catalog lineage: hyrox.bronze.hyrox_raw_season_8 → hyrox.silver.stg_race_performance_wap → hyrox.gold_marketing.pacing_obt_wap_verified](docs/databricks_lineage_pacing_obt_wap_verified.png)
+
+Unity Catalog lineage for `pacing_obt_wap_verified` — WAP lineage only. (Slice 2, dbt-built `hyrox.gold_marketing.pacing_obt` lineage, is a separate open check; this image is not a substitute for it.)
 
 - **Neo4j, Snowflake side:** the custom schema lineage graph lives in the
   Snowflake repo (`scripts/neo4j_load_schema.py`), not here. It is the
@@ -156,8 +162,8 @@ ossie/        Vendored Ossie hub doc (lands here when the semantic layer is buil
 ## Getting started
 
 ```bash
-git init && git add . && git commit -m "scaffold: Databricks port of hyrox pipeline"
-gh repo create hyrox-databricks-port --public --source=. --push
+git clone https://github.com/ginobaltazar7/hyrox-databricks-port.git
+cd hyrox-databricks-port
 ```
 
 <sub>Parts of this project, including documentation and analysis, were developed with assistance from Naru, an AI assistant.</sub>
