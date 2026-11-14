@@ -1,0 +1,5 @@
+streamlit>=1.40,<2
+altair>=5,<6
+pandas>=2.2
+databricks-sql-connector>=3,<5
+databricks-sdk>=0.50

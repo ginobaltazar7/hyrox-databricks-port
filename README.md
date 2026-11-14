@@ -25,8 +25,9 @@ Data: the same 5,000-row Season 8 sample as the Snowflake repo — public HYROX 
 ```
 sql/          Delta DDL (catalog, schemas, bronze/silver/gold tables)
 notebooks/    Ingestion notebook (parquet → Delta bronze)
-dbt/          dbt project (databricks adapter) — silver + gold models
+dbt_project/          dbt project (databricks adapter) — silver + gold models
 ossie/        Ossie semantic model YAML.
+streamlit_app/  Streamlit app (Q1 bar, Q2 scatter + correlation table, Q5 notes panel), reading the gold tables — see streamlit_app/README.md.
 ```
 
 ## Phases
@@ -43,7 +44,9 @@ ossie/        Ossie semantic model YAML.
 
 - [x] **5. Semantic layer** — dbt semantic models, validated and queried with [MetricFlow](https://docs.getdbt.com/docs/build/build-metrics-intro?version=2) and exported as portable [Apache Ossie](https://github.com/apache/ossie-converters) YAML, export Databricks semantic layer
 
-- [x] **6. Dashboards** — delivered as the Streamlit app in the Snowflake repo (`streamlit_app/`, Q1 bar, Q2 scatter + correlation table, Q5 notes panel, mobile-first, on Render), reading the Snowflake tables. No separate Databricks dashboard is planned for Q1–Q5.
+- [x] **6. Dashboards** — the Streamlit app lives in `streamlit_app/` (Q1 bar, Q2 scatter + correlation table, Q5 notes panel, mobile-first), reading the `hyrox.gold_marketing` tables via a PAT — the durable deployment, since Free Edition has no expiry. Q1 verified against the gold tables from a laptop (2026-11-14); Render deploy follows the repo copy. The Snowflake repo's version is the same front end against Snowflake tables.
+
+- [ ] **7. Genie + MCP/RAG (next)** — Genie space over the gold tables, Unity Catalog functions, and an eval harness (scope B, decided 2026-11-13). Step 0 workspace checks in progress.
 
 ## Lineage — clean split
 
@@ -146,7 +149,7 @@ Unity Catalog lineage for `pacing_obt_wap_verified` — WAP lineage only. (Slice
 
 ## Databricks Free Edition constraints (verified)
 
-- Serverless only; single 2X-Small SQL warehouse. Personal Access Tokens is not used or needed at this time unless at some point a more automated workflow like CI/CD or third party tooling need to interact with the pipeline.  Auth is OAuth via `databricks auth login`, then `auth_type: oauth` in `dbt/profiles.yml`.
+- Serverless only; single 2X-Small SQL warehouse. Auth is OAuth via `databricks auth login`, then `auth_type: oauth` in `dbt_project/profiles.yml` — for dbt. A Personal Access Token (PAT) is in use for the Streamlit app on Render (created 2026-11-11, 90-day, comment `hyrox-streamlit-render`, expires ~2027-02-09; rotation reminder set for 2027-01-28). Service-principal OAuth (M2M) may 401 on Free Edition before any permission is checked — that is the Free limit, not a grants problem. The PAT runs as the workspace user, so it carries that user's permissions.
 
 - Catalog creation goes through SQL on the warehouse (the Free Edition metastore
   has no storage root, so CLI/API catalog creation fails).
