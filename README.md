@@ -6,6 +6,10 @@ For fans of Hyrox workouts, like my niece [Isabele](https://www.linkedin.com/in/
 
 A Databricks port of the [hyrox-tieredsla-pipeline](https://github.com/ginobaltazar7/hyrox-tieredsla-pipeline) (Snowflake) medallion pipeline using the same data, same questions, but a different cloud.
 
+> Live app: https://hyrox-databricks-port.onrender.com/ — verified live 2026-11-15. 
+
+![App Screenshot](docs/hyrox_render_cover.png?v=2)
+
 Why this port? To experiment and study the variations needed and patterns between one pipeline, one semantic model but differing warehouses. The Snowflake repo is the system of record; this repo proves the pipeline is portable in some aspects and gives the semantic layer (Apache Ossie) a second consumer. 
 
 Data: the same 5,000-row Season 8 sample as the Snowflake repo — public HYROX results via the unofficial pyrox-client, not licensed HYROX data. Full provenance is in the [Snowflake repo README](https://github.com/ginobaltazar7/hyrox-tieredsla-pipeline)
