@@ -9,6 +9,7 @@ dbt_packages/
 .env
 *.parquet
 *.csv
+!streamlit_app/data/*.csv
 
 # Databricks
 .databricks/

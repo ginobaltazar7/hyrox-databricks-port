@@ -96,8 +96,12 @@ class DataSourceError(RuntimeError):
 # ---------------------------------------------------------------- helpers
 
 def _local_dir():
+    """HYROX_LOCAL_DATA_DIR if set, else bundled data folder if present, else None."""
     path = os.getenv("HYROX_LOCAL_DATA_DIR")
-    return Path(path) if path else None
+    if path:
+        return Path(path)
+    bundled = Path(__file__).resolve().parent / "data"
+    return bundled if bundled.is_dir() else None
 
 
 def _auth_type():
