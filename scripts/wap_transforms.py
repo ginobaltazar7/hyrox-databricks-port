@@ -45,6 +45,9 @@ def main():
         logger.info(f"Isolation Forest evaluated {len(df_ml)} rows. Anomalies rate: {anomaly_rate * 100:.2f}%")
         if anomaly_rate > 0.05:
             halt = True
+    else:
+        logger.error(f"WAP GATE HALTED: only {len(df_ml)} rows — too few to audit, refusing to publish.")
+        raise ValueError(f"WAP GATE HALTED: only {len(df_ml)} rows — too few to audit.")
     if halt:
         logger.error(f"WAP GATE HALTED: {anomaly_rate * 100:.2f}% anomaly rate exceeds threshold.")
         raise ValueError(f"WAP GATE HALTED: {anomaly_rate * 100:.2f}% anomaly rate exceeds threshold.")

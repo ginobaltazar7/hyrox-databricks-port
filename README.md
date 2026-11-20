@@ -31,7 +31,9 @@ sql/          Delta DDL (catalog, schemas, bronze/silver/gold tables)
 notebooks/    Ingestion notebook (parquet → Delta bronze)
 dbt_project/          dbt project (databricks adapter) — silver + gold models
 ossie/        Ossie semantic model YAML.
-streamlit_app/  Streamlit app (Q1 bar, Q2 scatter + correlation table, Q5 notes panel), reading the gold tables — see streamlit_app/README.md.
+streamlit_app/  Streamlit app (Q1 bar, Q2 scatter + correlation table, Q5 notes panel), reading the frozen CSVs in `streamlit_app/data/` — see streamlit_app/README.md.
+.github/workflows/  Weekly refresh chain (pull, refresh, land-by-hand) — see the weekly refresh section below.
+scripts/      Refresh chain scripts (ingest trigger, gold CSV export, parquet land/pull) + the WAP gate.
 ```
 
 ## Phases
@@ -48,9 +50,11 @@ streamlit_app/  Streamlit app (Q1 bar, Q2 scatter + correlation table, Q5 notes 
 
 - [x] **5. Semantic layer** — dbt semantic models, validated and queried with [MetricFlow](https://docs.getdbt.com/docs/build/build-metrics-intro?version=2) and exported as portable [Apache Ossie](https://github.com/apache/ossie-converters) YAML, export Databricks semantic layer
 
-- [x] **6. Dashboards** — the Streamlit app lives in `streamlit_app/` (Q1 bar, Q2 scatter + correlation table, Q5 notes panel, mobile-first), reading the `hyrox.gold_marketing` tables via a PAT — the durable deployment, since Free Edition has no expiry. Q1 verified against the gold tables from a laptop (2026-11-14); Render deploy follows the repo copy. The Snowflake repo's version is the same front end against Snowflake tables.
+- [x] **6. Dashboards** — the Streamlit app lives in `streamlit_app/` (Q1 bar, Q2 scatter + correlation table, Q5 notes panel, mobile-first), reading the frozen CSVs in `streamlit_app/data/` (refreshed weekly by GitHub Actions; the PAT path is the fallback when the folder is absent) — the durable deployment, since Free Edition has no expiry. Q1 verified against the gold tables from a laptop (2026-11-14); Render deploy follows the repo copy. The Snowflake repo's version is the same front end against Snowflake tables.
 
 - [ ] **7. Genie + MCP/RAG (next)** — Genie space over the gold tables, Unity Catalog functions, and an eval harness (scope B, decided 2026-11-13). Step 0 workspace checks in progress.
+
+- [x] **8. Weekly refresh (automated)** — GitHub Actions pulls the full Season 8, runs the ingest notebook + dbt, and refreshes the frozen CSVs the app serves; see the weekly refresh section below.
 
 ## Lineage — clean split
 
@@ -102,7 +106,7 @@ Unity Catalog lineage for `pacing_obt_wap_verified` — WAP lineage only. (Slice
 
 6. SQL Editor: `CREATE VOLUME IF NOT EXISTS hyrox.bronze.landing;`
 
-7. Catalog → hyrox → bronze → landing → Upload → `hyrox_season_8.parquet`.
+7. Catalog → hyrox → bronze → landing → Upload → `hyrox_season_8.parquet`. (First build only — the pull workflow lands the full-season file weekly after that; see the weekly refresh section below.)
 
 8. Open `notebooks/01_ingest_bronze.py`, attach to **Serverless** compute (not the
    SQL warehouse — Python needs serverless), Run all → Delta bronze table.
@@ -165,6 +169,52 @@ Unity Catalog lineage for `pacing_obt_wap_verified` — WAP lineage only. (Slice
 - Signup terms reserve the right to train on workspace data. The Hyrox dataset is
   public scraped race results, so exposure is nil. Still, keep the client or
   proprietary data out of this workspace.
+
+## Hyrox Fresh Data Kit — weekly refresh (2026-11-20)
+
+The app serves frozen CSVs from `streamlit_app/data/`, so it never touches
+Databricks at request time. A weekly GitHub Actions chain keeps those CSVs
+fresh; a failed run leaves the old CSVs serving, so the app never breaks.
+
+- **Pull** — Mondays 02:00 UTC, `.github/workflows/pull-season.yml`: the
+  runner pulls the full Season 8 with pyrox-client (open internet, like
+  Colab), validates the parquet, and lands it in the Volume
+  `hyrox.bronze.landing`, then triggers the refresh. No Colab step.
+- **Refresh** — Mondays 03:00 UTC, `.github/workflows/refresh-data.yml`:
+  submits the ingest notebook as a one-time Jobs API run on serverless,
+  runs `dbt build`, exports the two gold tables to CSVs with a validation
+  gate, and commits only if the CSVs changed. Render redeploys on the commit.
+- **Land by hand** — `.github/workflows/land-parquet.yml`: paste a direct
+  download URL (a link-shared Drive file, or a raw URL from the Snowflake
+  repo) and it downloads, validates, and lands the file, optionally
+  triggering the refresh.
+
+Setup: five repo secrets — `DATABRICKS_HOST` (workspace URL with scheme,
+SDK only), `DATABRICKS_SERVER_HOSTNAME` (bare hostname, SQL connector and
+dbt), `DATABRICKS_HTTP_PATH`, `DATABRICKS_TOKEN` (the PAT), and
+`DATABRICKS_NOTEBOOK_PATH` (workspace path of the ingest notebook, no `.py`).
+The PAT needs the `jobs`, `workspace`, `files`, and `sql` scopes — the token
+created for the Streamlit app only carried `sql`, and a Jobs API call 403s
+without them (Settings → Developer → Access Tokens → Manage → Update token).
+
+Proven 2026-11-19: the pull fetched 715,728 rows x 51 columns in 61.7s, and
+a manual Jobs API submit returned a `run_id`, so Free Edition accepts Jobs
+API submits — the earlier 403 was the token's scopes, not a Free Edition wall.
+
+Know before the first run: the export sorts deterministically, so the first
+successful refresh reorders the CSV rows and nothing else. Apply
+`notebook-sample-change.diff` before the first pull lands the big file: it
+makes the notebook draw a deterministic, exact 5,000-row sample in Spark
+(hash of each row's identity fields, 5,000 smallest hashes) before the
+identity rules, so bronze stays the 5,000-row sample — but the frozen
+numbers move to the new draw, and the gist/demo recording still quotes
+the old ones until refreshed. The Volume is not versioned: the pull itself is
+the backup. The PAT expires ~2027-02-09.
+
+The package also carries the Nov 20 code-review fixes: hash-based sampling
+in the notebook diff, a WAP gate that halts on 10 or fewer rows, a 5,000-row
+floor on landed and pulled files, and an ingest timeout that cancels the
+abandoned run before failing.
 
 ## Getting started
 

@@ -22,6 +22,43 @@ The RUNBOOK covers *how to rebuild*; this file covers *how not to break things*.
 - The WAP script's Publish stage (`scripts/wap_transforms.py`) writes its verified staging set to `gold_marketing.pacing_obt_wap_verified` — never to `pacing_obt`.
 - The Q1/Q2 gold tables (`q1_station_long`, `q1_station_variance`, `q2_station_degradation`, `q2_deviation_correlation`) are dbt models in `dbt_project/models/gold_marketing/` — same rule: dbt owns them.
 
+## Weekly refresh (GitHub Actions — the scheduler)
+
+- The scheduler is GitHub Actions, not a Databricks Jobs DAG. Three
+  workflows in `.github/workflows/`: `pull-season.yml` (Mondays 02:00 UTC —
+  pulls the full season with pyrox-client, validates, lands it in the
+  Volume, triggers the refresh), `refresh-data.yml` (Mondays 03:00 UTC —
+  submits the ingest notebook via the Jobs API on serverless, runs
+  `dbt build`, exports the Q1/Q2 CSVs with a validation gate, commits only
+  if they changed), `land-parquet.yml` (manual fallback — paste a direct
+  download URL to land a parquet by hand).
+- The app serves frozen CSVs from `streamlit_app/data/` and never touches
+  Databricks at request time. The export script is the only writer of
+  those CSVs: never hand-edit them. The validation gate is the safety
+  story — Q1 must be exactly 8 rows with the exact station set, Q2 rows
+  must equal the pacing_obt row count, and land/pull refuse any file under
+  5,000 rows. A failed run leaves the old CSVs serving.
+- The notebook samples 5,000 rows from the full-season file by a hash of
+  each row's identity fields (5,000 smallest hashes). The same source file
+  always yields the same sample regardless of partitioning. Do not
+  reintroduce `F.rand(seed)` sampling — it seeds per partition and cannot
+  promise that. The first refresh after the sample change moves the frozen
+  numbers to the new draw.
+- The ingest timeout cancels the abandoned run (`w.jobs.cancel_run`) before
+  the workflow fails, so a retry cannot race it. Do not remove the cancel.
+- The WAP gate halts on 10 or fewer rows, the same as on an anomaly-rate
+  breach. Never let a small input publish as verified.
+- CI installs its own dependencies inline in each workflow (pyrox-client,
+  pyarrow, databricks-sdk, databricks-sql-connector, pandas; dbt Fusion via
+  the official installer). The workflows do not read
+  `streamlit_app/requirements.txt` — that file is the Render app's only.
+  Do not add script dependencies to it.
+- GitHub secrets (never in code, issues, PRs, or docs): `DATABRICKS_HOST`
+  (full URL, SDK only), `DATABRICKS_SERVER_HOSTNAME` (bare hostname),
+  `DATABRICKS_HTTP_PATH`, `DATABRICKS_TOKEN`, `DATABRICKS_NOTEBOOK_PATH`
+  (workspace path, no `.py`). The PAT needs the `jobs`, `workspace`,
+  `files`, and `sql` scopes.
+
 ## Ossie semantic model (do not hand-maintain)
 
 - Never hand-edit `ossie/semantic_model.yaml` beyond AI-context annotations.
@@ -38,6 +75,7 @@ The RUNBOOK covers *how to rebuild*; this file covers *how not to break things*.
 - Pin dbt-core + dbt-databricks as a matched pair before the first build (the Snowflake side's unpinned install pulled a beta dbt-core and broke snapshots).
 - All `dbt sl` commands are the dbt-Cloud platform route and fail locally with dbt1001 (no `dbt_cloud.yaml`). Local semantic-layer proof is `mf validate-configs` / `mf list metrics` / `mf query`.
 - Project venvs live in `~/.venvs/<name>`, never inside the repo. The Streamlit venv is `~/.venvs/hyrox-databricks` (Python 3.12.16).
+- The refresh workflow installs Fusion via the official installer (`curl -fsSL https://public.cdn.getdbt.com/fs/install/install.sh | sh -s -- --update`) and runs `dbt build` on the runner. dbt-core is never pip-installed in CI — the same shadowing trap as the mf venv.
 
 ## Workspace references (never hardcode)
 
@@ -48,7 +86,8 @@ The RUNBOOK covers *how to rebuild*; this file covers *how not to break things*.
 ## Environment variables (exact names)
 
 - Streamlit app: `DATABRICKS_SERVER_HOSTNAME`, `DATABRICKS_HTTP_PATH`, `DATABRICKS_TOKEN`, `DATABRICKS_AUTH_TYPE=pat`. Local preview mode reads `HYROX_LOCAL_DATA_DIR` instead and never touches Databricks.
-- The PAT runs as the workspace user and carries that user's permissions. Created 2026-11-11, 90-day, comment `hyrox-streamlit-render`, expires ~2027-02-09. Rotate before expiry (reminder set for 2027-01-28); after rotating, update the Render env vars, verify the live app, then revoke the old PAT.
+- The PAT runs as the workspace user and carries that user's permissions. Created 2026-11-11, 90-day, comment `hyrox-streamlit-render`, expires ~2027-02-09. Rotate before expiry (reminder set for 2027-01-28); after rotating, update the Render env vars AND the `DATABRICKS_TOKEN` GitHub Actions secret, verify the live app, then revoke the old PAT. The rotated PAT must carry the `jobs`, `workspace`, `files`, and `sql` scopes.
+- GitHub Actions secrets: `DATABRICKS_HOST` (full URL), `DATABRICKS_SERVER_HOSTNAME` (bare hostname), `DATABRICKS_HTTP_PATH`, `DATABRICKS_TOKEN`, `DATABRICKS_NOTEBOOK_PATH`. The SQL connector and dbt want the bare hostname; the SDK wants the full URL. Do not use one value for both.
 - Never paste the PAT value, the workspace host, or the HTTP path into issues, PRs, or docs.
 
 ## Schema changes (four places, not one)
@@ -59,14 +98,15 @@ A column addition/removal/rename must land in ALL of:
 2. `notebooks/01_ingest_bronze.py` (bronze landing — identity columns `result_id`/`athlete_id`/`updated_at`)
 3. `dbt_project/models/silver/stg_hyrox_races.sql` and `dbt_project/models/gold_marketing/pacing_obt.sql` — plus `dbt_project/models/gold_marketing/semantic_models.yml` if the column feeds a metric
 4. `ossie/semantic_model.yaml` — regenerated from dbt, never hand-edited (beyond AI-context annotations)
+5. `scripts/land_parquet.py` and `scripts/pull_season.py` — the `REQUIRED_COLUMNS` set (duplicated in both files; keep them in lockstep). The column set is the contract with the ingest notebook.
 
 ## Dashboards
 
-- Streamlit IS the frontend: the app in `streamlit_app/` (mobile-first) runs on Render — a NEW Web Service for this repo (decided 2026-11-14), not a re-point of the Snowflake service. It reads the Q1/Q2 gold tables with a PAT; it never recomputes them. No viewer login.
+- Streamlit IS the frontend: the app in `streamlit_app/` (mobile-first) runs on Render — a NEW Web Service for this repo (decided 2026-11-14), not a re-point of the Snowflake service. It reads the frozen CSVs in `streamlit_app/data/` and never touches Databricks at request time; the PAT path is the fallback when the `data/` folder is absent. It never recomputes the tables. No viewer login.
 - Local preview mode (`HYROX_LOCAL_DATA_DIR`) reads the preview CSVs instead of Databricks — verify charts there before a live deploy.
 - Python 3.12 only (Render uses 3.12). Altair 5 fails on Python 3.14 — keep `altair>=5,<6` and do not edit `requirements.txt` for this.
 - The Snowflake repo's version of the app is the same front end against Snowflake tables; its Render deployment is down since the Snowflake trial expired (~2026-11-09).
-- Verify live by the footer: "Data source: Databricks" (not "local CSV preview"), Sled Pull 6.70, Q2 pooled n = 5,000, −1.02 / 1.37 / −0.16.
+- Verify live by the footer: "Data source: local CSV preview", Sled Pull 6.70, Q2 pooled n = 5,000, −1.02 / 1.37 / −0.16.
 
 ## Genie + MCP/RAG (scope B — decided 2026-11-13)
 

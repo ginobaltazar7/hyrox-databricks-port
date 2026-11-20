@@ -1,0 +1,142 @@
+# Refresh frozen Hyrox tables — weekly
+#
+# Runs the Databricks pipeline (ingest notebook -> dbt build -> export) and
+# lands fresh CSVs in streamlit_app/data/, which the app serves without
+# touching Databricks. If the CSVs come out identical, nothing is committed.
+# If any step fails, the old CSVs keep serving — the app never breaks.
+#
+# Schedule: Mondays 03:00 UTC, catching the weekend's races. Also runnable
+# by hand from the Actions tab (workflow_dispatch) — do that for the first run.
+#
+# Secrets required (repo Settings -> Secrets and variables -> Actions):
+#   DATABRICKS_HOST          workspace URL WITH scheme, e.g. https://dbc-xxxx.cloud.databricks.com
+#                            (used ONLY by the Databricks SDK in trigger_ingest.py,
+#                            which wants the full URL)
+#   DATABRICKS_SERVER_HOSTNAME  bare workspace hostname WITHOUT scheme, e.g.
+#                            dbc-xxxx.cloud.databricks.com (the same value already
+#                            set as DATABRICKS_SERVER_HOSTNAME on Render — copy it
+#                            from there, do not paste the full URL)
+#                            (used by the SQL connector in export_gold_csvs.py and
+#                            by dbt, which both want the bare hostname; feeding them
+#                            the full URL fails — the two consumers want different
+#                            shapes, so they are separate secrets on purpose)
+#   DATABRICKS_HTTP_PATH     SQL warehouse HTTP path, e.g. /sql/1.0/warehouses/abc
+#   DATABRICKS_TOKEN         the workspace PAT (created 2026-11-11, expires ~2027-02-09)
+#   DATABRICKS_NOTEBOOK_PATH workspace path of the synced ingest notebook,
+#                            no .py extension, e.g.
+#                            /Workspace/Users/gb@ginobaltazar.com/hyrox-databricks-port/notebooks/01_ingest_bronze
+#                            (Workspace -> Git Folder -> notebook -> Copy path)
+#
+# Auth note: the PAT is the working answer on Free Edition. Service-principal
+# OAuth (M2M) 401s on Free Edition before any permission is checked, so the
+# workflow deliberately uses the PAT everywhere. Rotating the PAT (reminder
+# 2027-01-28) means updating DATABRICKS_TOKEN here too, plus Render.
+
+name: Refresh frozen Hyrox tables
+
+on:
+  schedule:
+    - cron: "0 3 * * 1" # Mondays 03:00 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: refresh-data
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Check out repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install tools
+        run: |
+          pip install "databricks-sdk>=0.50" "databricks-sql-connector>=3,<5" pandas
+          # dbt Fusion is a standalone binary, NOT a pip package. Never
+          # pip-install dbt-core here: it shadows Fusion and fails with a
+          # false time-spine error. The installer drops the binary in
+          # ~/.local/bin/dbt, the same place it lives on the Mac.
+          curl -fsSL https://public.cdn.getdbt.com/fs/install/install.sh | sh -s -- --update
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          dbt --version
+
+      - name: Run ingest notebook on serverless
+        env:
+          DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
+          DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
+          DATABRICKS_NOTEBOOK_PATH: ${{ secrets.DATABRICKS_NOTEBOOK_PATH }}
+        run: python scripts/trigger_ingest.py
+
+      - name: Write dbt profiles (CI)
+        # Static file; secrets reach dbt only through env_var() at runtime,
+        # so no credential ever lands in the file.
+        run: |
+          mkdir -p "$RUNNER_TEMP/dbt-profiles"
+          cat > "$RUNNER_TEMP/dbt-profiles/profiles.yml" <<'EOF'
+          hyrox_databricks:
+            target: dev
+            outputs:
+              dev:
+                type: databricks
+                catalog: hyrox
+                schema: silver
+                host: "{{ env_var('DATABRICKS_SERVER_HOSTNAME') }}"
+                http_path: "{{ env_var('DATABRICKS_HTTP_PATH') }}"
+                token: "{{ env_var('DATABRICKS_TOKEN') }}"
+                threads: 4
+                # Let dbt wait up to 10 minutes for the warehouse to start,
+                # per the dbt docs' own recommendation for a starting warehouse.
+                connect_timeout: 600
+          EOF
+
+      - name: dbt build (silver + gold)
+        env:
+          DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
+          DATABRICKS_SERVER_HOSTNAME: ${{ secrets.DATABRICKS_SERVER_HOSTNAME }}
+          DATABRICKS_HTTP_PATH: ${{ secrets.DATABRICKS_HTTP_PATH }}
+          DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
+        working-directory: dbt_project
+        run: |
+          # The warehouse may be asleep; a cold start can fail. Retry up to
+          # 3 times with a 2-minute gap. If all 3 fail the step fails and the
+          # old CSVs keep serving.
+          for attempt in 1 2 3; do
+            if dbt build --profiles-dir "$RUNNER_TEMP/dbt-profiles"; then
+              echo "dbt build succeeded (attempt $attempt)"
+              exit 0
+            fi
+            echo "dbt build failed (attempt $attempt of 3)"
+            sleep 120
+          done
+          echo "dbt build failed after 3 attempts" >&2
+          exit 1
+
+      - name: Export gold tables to CSVs
+        env:
+          DATABRICKS_SERVER_HOSTNAME: ${{ secrets.DATABRICKS_SERVER_HOSTNAME }}
+          DATABRICKS_HTTP_PATH: ${{ secrets.DATABRICKS_HTTP_PATH }}
+          DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
+        run: python scripts/export_gold_csvs.py
+
+      - name: Commit CSVs if they changed
+        run: |
+          if git diff --quiet -- streamlit_app/data/; then
+            echo "CSVs unchanged — nothing to commit."
+          else
+            git add streamlit_app/data/
+            git -c user.name="hyrox-refresh[bot]" -c user.email="hyrox-refresh[bot]@users.noreply.github.com" \
+              commit -m "Refresh frozen Hyrox tables [skip ci]"
+            git push
+            echo "CSVs updated and pushed — Render redeploys on its own."
+          fi

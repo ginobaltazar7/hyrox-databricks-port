@@ -1,0 +1,77 @@
+# Land a new parquet in the Volume — manual trigger
+#
+# You run Colab, save the parquet somewhere the job can reach, then run this
+# workflow with the file's direct download URL. It downloads the file,
+# validates it is a real parquet with the columns the ingest notebook needs,
+# and uploads it to the Volume hyrox.bronze.landing, overwriting what is
+# there. The refresh workflow then picks it up on its next run — or right
+# away, if "run_refresh" is left on.
+#
+# Where to save the parquet after Colab (either works — the job just needs
+# a direct download URL):
+#   - Google Drive: upload it, set sharing to "Anyone with the link", and
+#     use https://drive.google.com/uc?export=download&id=<FILE_ID>
+#   - The Snowflake repo: commit it to data/ and use the raw URL,
+#     https://github.com/ginobaltazar7/hyrox-tieredsla-pipeline/raw/main/data/<name>.parquet
+#     (this is the pattern the ingest notebook itself already documents)
+#
+# Secrets required: the same DATABRICKS_HOST and DATABRICKS_TOKEN as the
+# refresh workflow. No new secrets.
+#
+# Note: the Volume is not versioned. Landing a file overwrites the previous
+# one, so keep the source file (Drive, or the repo commit) as the backup.
+
+name: Land a new parquet in the Volume
+
+on:
+  workflow_dispatch:
+    inputs:
+      parquet_url:
+        description: "Direct download URL of the parquet (GitHub raw URL, or a link-shared Drive uc link)"
+        required: true
+        type: string
+      target_name:
+        description: "File name in the Volume (hyrox.bronze.landing)"
+        required: false
+        default: "hyrox_season_8.parquet"
+        type: string
+      run_refresh:
+        description: "Trigger the refresh workflow after landing"
+        required: false
+        default: true
+        type: boolean
+
+permissions:
+  contents: read
+
+jobs:
+  land:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Check out repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install tools
+        run: pip install "databricks-sdk>=0.50" pyarrow
+
+      - name: Download, validate, and land the parquet
+        env:
+          DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
+          DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
+        run: |
+          python scripts/land_parquet.py \
+            --url "${{ inputs.parquet_url }}" \
+            --target-name "${{ inputs.target_name }}"
+
+      - name: Trigger the refresh workflow
+        if: ${{ inputs.run_refresh }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh workflow run refresh-data.yml --ref "${{ github.ref_name }}"

@@ -1,0 +1,79 @@
+# Pull a fresh season and land it — the automated half of the chain
+#
+# On Mondays 02:00 UTC the runner pulls the full season with pyrox-client
+# (open internet, like Colab), validates the parquet, and uploads it to the
+# Volume hyrox.bronze.landing, overwriting what is there. With
+# "run_refresh" left on it then triggers the refresh workflow, so the new
+# data flows through ingest → dbt → CSVs → app in one chain. The refresh
+# workflow also keeps its own Monday 03:00 UTC schedule as a backstop.
+#
+# No Colab step, no manual steps. The whole chain runs free on a public repo.
+#
+# Secrets required: the same DATABRICKS_HOST and DATABRICKS_TOKEN as the
+# refresh workflow. No new secrets. The token needs the `files` scope for
+# the upload (and `jobs` for the refresh it triggers) — see the README.
+#
+# Note: the Volume is not versioned. Landing a file overwrites the previous
+# one. The pull itself is the backup — re-running it re-fetches the season.
+
+name: Pull a fresh season and land it
+
+on:
+  schedule:
+    - cron: "0 2 * * 1"
+  workflow_dispatch:
+    inputs:
+      season:
+        description: "Hyrox season to pull"
+        required: false
+        default: "8"
+        type: string
+      target_name:
+        description: "File name in the Volume (hyrox.bronze.landing)"
+        required: false
+        default: "hyrox_season_8.parquet"
+        type: string
+      run_refresh:
+        description: "Trigger the refresh workflow after landing"
+        required: false
+        default: true
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pull-season
+  cancel-in-progress: false
+
+jobs:
+  pull:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Check out repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install tools
+        run: pip install "pyrox-client" pyarrow "databricks-sdk>=0.50"
+
+      - name: Pull the season and land it in the Volume
+        env:
+          DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
+          DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
+        run: |
+          python scripts/pull_season.py \
+            --season "${{ inputs.season || '8' }}" \
+            --target-name "${{ inputs.target_name || 'hyrox_season_8.parquet' }}"
+
+      - name: Trigger the refresh workflow
+        if: ${{ inputs.run_refresh != false }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh workflow run refresh-data.yml --ref "${{ github.ref_name }}"
