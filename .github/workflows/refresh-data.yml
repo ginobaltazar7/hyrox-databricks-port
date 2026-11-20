@@ -111,8 +111,12 @@ jobs:
           # The warehouse may be asleep; a cold start can fail. Retry up to
           # 3 times with a 2-minute gap. If all 3 fail the step fails and the
           # old CSVs keep serving.
+          # Full refresh, not incremental: the notebook overwrites bronze
+          # with a fresh 5,000-row draw each run, and an incremental merge
+          # would keep every earlier draw's rows in silver forever. Silver
+          # is rebuilt from the current bronze; at 5,000 rows that is cheap.
           for attempt in 1 2 3; do
-            if dbt build --profiles-dir "$RUNNER_TEMP/dbt-profiles"; then
+            if dbt build --full-refresh --profiles-dir "$RUNNER_TEMP/dbt-profiles"; then
               echo "dbt build succeeded (attempt $attempt)"
               exit 0
             fi
