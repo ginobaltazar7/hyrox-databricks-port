@@ -10,13 +10,13 @@ SELECT
 FROM {{ ref('pacing_obt') }}
 LATERAL VIEW stack(
     8,
-    'SKIERG', skierg_time,
-    'SLEDPUSH', sledpush_time,
-    'SLEDPULL', sledpull_time,
-    'BURPEEBROADJUMP', burpeebroadjump_time,
-    'ROWERG', rowerg_time,
-    'FARMERSCARRY', farmerscarry_time,
-    'SANDBAGLUNGES', sandbaglunges_time,
-    'WALLBALLS', wallballs_time
+    'SKIERG_TIME', skierg_time,
+    'SLEDPUSH_TIME', sledpush_time,
+    'SLEDPULL_TIME', sledpull_time,
+    'BURPEEBROADJUMP_TIME', burpeebroadjump_time,
+    'ROWERG_TIME', rowerg_time,
+    'FARMERSCARRY_TIME', farmerscarry_time,
+    'SANDBAGLUNGES_TIME', sandbaglunges_time,
+    'WALLBALLS_TIME', wallballs_time
 ) t AS station, transition_time
 WHERE division IN ('pro', 'pro_doubles', 'elite', 'elite_doubles')
