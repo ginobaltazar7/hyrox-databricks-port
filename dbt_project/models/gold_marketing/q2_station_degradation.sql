@@ -11,3 +11,16 @@ SELECT
     wallballs_time - skierg_time AS station_degradation,
     DATE('2020-01-01') AS pacing_date
 FROM {{ ref('pacing_obt') }}
+-- Complete results only: a row missing any run or station time cannot
+-- produce a deviation or a degradation. Mirrors the Snowflake model;
+-- the filter was dropped when this model was ported.
+WHERE run1_time IS NOT NULL
+  AND run2_time IS NOT NULL
+  AND run3_time IS NOT NULL
+  AND run4_time IS NOT NULL
+  AND run5_time IS NOT NULL
+  AND run6_time IS NOT NULL
+  AND run7_time IS NOT NULL
+  AND run8_time IS NOT NULL
+  AND skierg_time IS NOT NULL
+  AND wallballs_time IS NOT NULL

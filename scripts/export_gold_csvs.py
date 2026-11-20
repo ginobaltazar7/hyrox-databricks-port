@@ -38,8 +38,17 @@ Q2_SQL = """
     FROM hyrox.gold_marketing.q2_station_degradation
     ORDER BY division, first_km_deviation, station_degradation
 """
-# Cross-check: the Q2 table must hold one row per result in the OBT.
-Q2_COUNT_SQL = "SELECT COUNT(*) FROM hyrox.gold_marketing.pacing_obt"
+# Cross-check: the Q2 table must hold one row per complete result in the
+# OBT. The Q2 model drops rows missing any run or station time, mirroring
+# the Snowflake model, so this count must drop them too.
+Q2_COUNT_SQL = """
+    SELECT COUNT(*) FROM hyrox.gold_marketing.pacing_obt
+    WHERE run1_time IS NOT NULL AND run2_time IS NOT NULL
+      AND run3_time IS NOT NULL AND run4_time IS NOT NULL
+      AND run5_time IS NOT NULL AND run6_time IS NOT NULL
+      AND run7_time IS NOT NULL AND run8_time IS NOT NULL
+      AND skierg_time IS NOT NULL AND wallballs_time IS NOT NULL
+"""
 
 Q1_HEADERS = ["STATION", "VARIANCE_DATE", "TRANSITION_TIME_VARIANCE", "N_OBS"]
 Q2_HEADERS = ["DIVISION", "FIRST_KM_DEVIATION", "STATION_DEGRADATION"]
