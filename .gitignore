@@ -19,3 +19,4 @@ dbt_packages/
 .DS_Store
 .idea/
 .vscode/
+dbt_project/.user.yml

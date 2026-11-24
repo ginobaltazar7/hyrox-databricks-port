@@ -14,6 +14,12 @@ Why this port? To experiment and study the variations needed and patterns betwee
 
 Data: the same 5,000-row Season 8 sample as the Snowflake repo — public HYROX results via the unofficial pyrox-client, not licensed HYROX data. Full provenance is in the [Snowflake repo README](https://github.com/ginobaltazar7/hyrox-tieredsla-pipeline)
 
+## Data source and disclaimer
+
+This is an unofficial, non-commercial learning project. It is not affiliated with, endorsed, or sponsored by HYROX, and HYROX has not reviewed or approved it. HYROX is a trademark of its owner.
+
+Race results come from public HYROX results via the unofficial pyrox-client, served from its own public bucket. The data is provided as-is, with no warranty of accuracy or completeness, and only a 5,000-row Season 8 sample is used. Do not rely on it for official results, rankings, or qualification. 
+
 ## Architecture map (Snowflake → Databricks)
 
 | Snowflake | Databricks |
